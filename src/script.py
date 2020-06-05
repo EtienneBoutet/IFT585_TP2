@@ -73,11 +73,8 @@ class Router:
 
                 self.routing_table[v] = (self.id, current)
 
-    def notify_host(self, packet):
-        self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", packet.destination_port))
-
-    def send_to(self, packet, router_id):
-        self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", ROUTER_PORTS[router_id]))
+    def send_to(self, packet, port):
+        self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", port))
 
     def listen(self):
         print(self.id + " Listening on port : " + str(self.socket.getsockname()[1]))
@@ -89,11 +86,10 @@ class Router:
             packet.nodes.append(self.id)
 
             if packet.destination == self.id:
-                # notify host
-                print("Routeur: " + self.id + " remet le packet à l'hôte destinateur")
-                self.notify_host(packet)
+                print("Router: " + self.id + " is sending the packet to destination host")
+                self.send_to(packet, packet.destination_port)
             else:
-                self.send_to(packet, self.routing_table[packet.destination][1])
+                self.send_to(packet, ROUTER_PORTS[self.routing_table[packet.destination][1]])
 
 
 class Network:
@@ -105,15 +101,13 @@ class Network:
         self.sendHost = None
         self.receiveHost = None
 
-    def start_router(self, router):
-        router.listen()
-
-    def start_host_thread(self, host):
-        host.listen()
+    def listen(self, listener):
+        listener.listen()
 
     def run(self):
         V, E = self.G
-        # Create routers and link hosts
+
+        # Create routers and link hosts and start listening thread
         for node in V:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.bind(('127.0.0.1', 0))
@@ -121,33 +115,38 @@ class Network:
             ROUTER_PORTS[node] = s.getsockname()[1]
             router = Router(node, self.G, self.w, s)
 
-            thread = threading.Thread(target=self.start_router, args=(router,))
+            thread = threading.Thread(target=self.listen, args=(router,))
             thread.daemon = True
             thread.start()
 
             self.routers.append(router)
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.bind(("127.0.0.1", 0))
-        self.sendHost = Host(self.routers[0], s)
-
+        # Create receive host and start listening thread
         s_2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s_2.bind(("127.0.0.1", 0))
-        self.receiveHost = Host(self.routers[-1], s_2)
+        self.receiveHost = Host("2", self.routers[-1], s_2)
+
+        thread = threading.Thread(target=self.listen, args=(self.receiveHost,))
+        thread.daemon = True
+        thread.start()
+
+        # Create sending host
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.bind(("127.0.0.1", 0))
+        self.sendHost = Host("1", self.routers[0], s)
 
         if self.isLs:
             for router in self.routers:
                 router.update_routing_table()
+        else:
+            pass
 
-            thread = threading.Thread(target=self.start_host_thread, args=(self.receiveHost,))
-            thread.daemon = True
-            thread.start()
-
-            self.sendHost.send("Hello World", self.receiveHost)
+        self.sendHost.send("Hello World", self.receiveHost)
 
 
 class Host:
-    def __init__(self, router, socket):
+    def __init__(self, id, router, socket):
+        self.id = id
         self.router = router
         self.socket = socket
 
@@ -157,15 +156,9 @@ class Host:
         # Send data to self.router.
         address = ("127.0.0.1", ROUTER_PORTS[self.router.id])
 
+        print("Host : " + self.id + " is sending data to host : ", destinationHost.id)
         self.socket.sendto(pickle.dumps(packet), address)
-
-        packet, _ = self.socket.recvfrom(65000)
-        packet = pickle.loads(packet)
-        print("Host has received : " + str(packet.data))
-        string = "Packet passed by routers : "
-        for node in packet.nodes:
-            string += node + " "
-        print(string)
+        input()
 
     def listen(self):
         packet, _ = self.socket.recvfrom(65000)
@@ -175,9 +168,6 @@ class Host:
         for node in packet.nodes:
             string += node + " "
         print(string)
-
-
-
 
 
 def main():
@@ -203,7 +193,7 @@ def main():
     }
 
     G = (V, E)
-    Network(True, G, w).run()
+    Network(True if sys.argv[1] == "ls" else False, G, w).run()
 
 
 if __name__ == "__main__":
