@@ -38,6 +38,7 @@ class Router:
             for u in candidats:
                 if v is None or connections_table[u][0] < min_node:
                     v = u
+                    min_node = connections_table[u][0]
 
             return v
 
