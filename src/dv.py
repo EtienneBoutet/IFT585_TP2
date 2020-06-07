@@ -80,7 +80,7 @@ class Router:
                 else:
                     # Envoyer à un autre routeur
                     self.send_to(packet, ROUTER_PORTS[self.routing_table[packet.dest][1]])
-                    # TODO : Regarder les routeur innactif. (Selon last_updated)
+                    # TODO : Véfirier les routeur innactif. (Selon last_updated)
 
     def send_to(self, packet, port):
         self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", port))
@@ -178,7 +178,7 @@ def main():
     thread.start()
 
     # Attendre que les tables de routage sont correct.
-    
+
     # Envoie du message
     send_host.send_to("Hello World !", receive_host)
 

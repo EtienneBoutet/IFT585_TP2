@@ -16,21 +16,12 @@ class Packet:
 
 
 class Router:
-    def __init__(self, isLs, id, G, w, socket):
-        self.isLs = isLs
+    def __init__(self, id, G, w, socket):
         self.id = id
         self.V, self.E = G
         self.w = w
         self.routing_table = {}
         self.socket = socket
-
-    def bellman_ford(self):
-        d = {v: float("inf") for v in self.V}
-        d[self.id] = 0
-
-        for _ in range(len(self.V) - 1):
-            for (u, v) in self.w:
-
 
     def dijkstra(self):
         candidats = set(self.V)
@@ -69,20 +60,17 @@ class Router:
         return connections_table
 
     def initialize_routing_table(self):
-        if self.isLs:
-            connections_table = self.dijkstra()
+        connections_table = self.dijkstra()
 
-            for v in self.V:
-                if v != self.id:
-                    current = v
+        for v in self.V:
+            if v != self.id:
+                current = v
+                next = connections_table[current][1]
+                while connections_table[next][1] is not None:
+                    current = next
                     next = connections_table[current][1]
-                    while connections_table[next][1] is not None:
-                        current = next
-                        next = connections_table[current][1]
 
-                    self.routing_table[v] = (self.id, current)
-        else:
-            pass
+                self.routing_table[v] = (self.id, current)
 
     def send_to(self, packet, port):
         self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", port))
@@ -108,8 +96,7 @@ class Router:
 
 
 class Network:
-    def __init__(self, isLs, G, w):
-        self.isLs = isLs
+    def __init__(self, G, w):
         self.G = G
         self.w = w
         self.routers = []
@@ -128,7 +115,7 @@ class Network:
             s.bind(('127.0.0.1', 0))
 
             ROUTER_PORTS[node] = s.getsockname()[1]
-            router = Router(self.isLs, node, self.G, self.w, s)
+            router = Router(node, self.G, self.w, s)
 
             thread = threading.Thread(target=self.listen, args=(router,))
             thread.daemon = True
@@ -150,11 +137,8 @@ class Network:
         s.bind(("127.0.0.1", 0))
         self.sendHost = Host("1", self.routers[0], s)
 
-        if self.isLs:
-            for router in self.routers:
-                router.initialize_routing_table()
-        else:
-            pass
+        for router in self.routers:
+            router.initialize_routing_table()
 
         self.sendHost.send("Hello World", self.receiveHost)
 
@@ -208,7 +192,7 @@ def main():
     }
 
     G = (V, E)
-    Network(True if sys.argv[1] == "ls" else False, G, w).run()
+    Network(G, w).run()
 
 
 if __name__ == "__main__":
