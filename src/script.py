@@ -2,13 +2,13 @@ import sys
 import threading
 import socket
 import pickle
-import time
 
 ROUTER_PORTS = {}
 
 
 class Packet:
-    def __init__(self, data, destination, destination_port, nodes=[]):
+    def __init__(self, type, data, destination, destination_port, nodes=[]):
+        self.type = type
         self.data = data
         self.destination = destination
         self.destination_port = destination_port
@@ -16,13 +16,21 @@ class Packet:
 
 
 class Router:
-    def __init__(self, id, G, w, socket, host=None):
+    def __init__(self, isLs, id, G, w, socket):
+        self.isLs = isLs
         self.id = id
         self.V, self.E = G
         self.w = w
         self.routing_table = {}
         self.socket = socket
-        self.host = host
+
+    def bellman_ford(self):
+        d = {v: float("inf") for v in self.V}
+        d[self.id] = 0
+
+        for _ in range(len(self.V) - 1):
+            for (u, v) in self.w:
+
 
     def dijkstra(self):
         candidats = set(self.V)
@@ -60,18 +68,21 @@ class Router:
 
         return connections_table
 
-    def update_routing_table(self):
-        connections_table = self.dijkstra()
+    def initialize_routing_table(self):
+        if self.isLs:
+            connections_table = self.dijkstra()
 
-        for v in self.V:
-            if v != self.id:
-                current = v
-                next = connections_table[current][1]
-                while connections_table[next][1] is not None:
-                    current = next
+            for v in self.V:
+                if v != self.id:
+                    current = v
                     next = connections_table[current][1]
+                    while connections_table[next][1] is not None:
+                        current = next
+                        next = connections_table[current][1]
 
-                self.routing_table[v] = (self.id, current)
+                    self.routing_table[v] = (self.id, current)
+        else:
+            pass
 
     def send_to(self, packet, port):
         self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", port))
@@ -81,15 +92,19 @@ class Router:
         while True:
             packet, _ = self.socket.recvfrom(65000)
             packet = pickle.loads(packet)
-            print(self.id + " Received : " + str(packet.data))
+            if packet.type == "data":
+                print(self.id + " Received : " + str(packet.data))
 
-            packet.nodes.append(self.id)
+                packet.nodes.append(self.id)
 
-            if packet.destination == self.id:
-                print("Router: " + self.id + " is sending the packet to destination host")
-                self.send_to(packet, packet.destination_port)
+                if packet.destination == self.id:
+                    print("Router: " + self.id + " is sending the packet to destination host")
+                    self.send_to(packet, packet.destination_port)
+                else:
+                    self.send_to(packet, ROUTER_PORTS[self.routing_table[packet.destination][1]])
             else:
-                self.send_to(packet, ROUTER_PORTS[self.routing_table[packet.destination][1]])
+                # Routing table
+                pass
 
 
 class Network:
@@ -113,7 +128,7 @@ class Network:
             s.bind(('127.0.0.1', 0))
 
             ROUTER_PORTS[node] = s.getsockname()[1]
-            router = Router(node, self.G, self.w, s)
+            router = Router(self.isLs, node, self.G, self.w, s)
 
             thread = threading.Thread(target=self.listen, args=(router,))
             thread.daemon = True
@@ -137,7 +152,7 @@ class Network:
 
         if self.isLs:
             for router in self.routers:
-                router.update_routing_table()
+                router.initialize_routing_table()
         else:
             pass
 
@@ -151,7 +166,7 @@ class Host:
         self.socket = socket
 
     def send(self, data, destinationHost):
-        packet = Packet(str.encode(data), destinationHost.router.id, destinationHost.socket.getsockname()[1])
+        packet = Packet("data", str.encode(data), destinationHost.router.id, destinationHost.socket.getsockname()[1])
 
         # Send data to self.router.
         address = ("127.0.0.1", ROUTER_PORTS[self.router.id])
