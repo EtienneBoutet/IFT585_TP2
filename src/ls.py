@@ -7,8 +7,7 @@ ROUTER_PORTS = {}
 
 
 class Packet:
-    def __init__(self, type, data, destination, destination_port, nodes=[]):
-        self.type = type
+    def __init__(self, data, destination, destination_port, nodes=[]):
         self.data = data
         self.destination = destination
         self.destination_port = destination_port
@@ -20,8 +19,8 @@ class Router:
         self.id = id
         self.V, self.E = G
         self.w = w
-        self.routing_table = {}
         self.socket = socket
+        self.routing_table = {}
 
     def dijkstra(self):
         candidats = set(self.V)
@@ -76,97 +75,47 @@ class Router:
         self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", port))
 
     def listen(self):
-        print(self.id + " Listening on port : " + str(self.socket.getsockname()[1]))
         while True:
             packet, _ = self.socket.recvfrom(65000)
             packet = pickle.loads(packet)
-            if packet.type == "data":
-                print(self.id + " Received : " + str(packet.data))
 
-                packet.nodes.append(self.id)
+            packet.nodes.append(self.id)
 
-                if packet.destination == self.id:
-                    print("Router: " + self.id + " is sending the packet to destination host")
-                    self.send_to(packet, packet.destination_port)
-                else:
-                    self.send_to(packet, ROUTER_PORTS[self.routing_table[packet.destination][1]])
+            print("Packet reçu par le routeur " + self.id)
+
+            if packet.destination == self.id:
+                self.send_to(packet, packet.destination_port)
             else:
-                # Routing table
-                pass
-
-
-class Network:
-    def __init__(self, G, w):
-        self.G = G
-        self.w = w
-        self.routers = []
-        self.sendHost = None
-        self.receiveHost = None
-
-    def listen(self, listener):
-        listener.listen()
-
-    def run(self):
-        V, E = self.G
-
-        # Create routers and link hosts and start listening thread
-        for node in V:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.bind(('127.0.0.1', 0))
-
-            ROUTER_PORTS[node] = s.getsockname()[1]
-            router = Router(node, self.G, self.w, s)
-
-            thread = threading.Thread(target=self.listen, args=(router,))
-            thread.daemon = True
-            thread.start()
-
-            self.routers.append(router)
-
-        # Create receive host and start listening thread
-        s_2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s_2.bind(("127.0.0.1", 0))
-        self.receiveHost = Host("2", self.routers[-1], s_2)
-
-        thread = threading.Thread(target=self.listen, args=(self.receiveHost,))
-        thread.daemon = True
-        thread.start()
-
-        # Create sending host
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.bind(("127.0.0.1", 0))
-        self.sendHost = Host("1", self.routers[0], s)
-
-        for router in self.routers:
-            router.initialize_routing_table()
-
-        self.sendHost.send("Hello World", self.receiveHost)
-
+                self.send_to(packet, ROUTER_PORTS[self.routing_table[packet.destination][1]])
 
 class Host:
-    def __init__(self, id, router, socket):
+    def __init__(self, id, socket, router):
         self.id = id
-        self.router = router
         self.socket = socket
+        self.router = router
 
-    def send(self, data, destinationHost):
-        packet = Packet("data", str.encode(data), destinationHost.router.id, destinationHost.socket.getsockname()[1])
+    def send_to(self, data, host):
+        packet = Packet(str.encode(data), host.router.id, host.socket.getsockname()[1])
 
-        # Send data to self.router.
+        # Envoyé le data au routeur connecté
         address = ("127.0.0.1", ROUTER_PORTS[self.router.id])
 
-        print("Host : " + self.id + " is sending data to host : ", destinationHost.id)
+        print("Le host " + self.id + " à envoyé le data au routeur " + self.router.id) 
         self.socket.sendto(pickle.dumps(packet), address)
-        input()
 
     def listen(self):
+        print("L'hôte 2 écoute...")
         packet, _ = self.socket.recvfrom(65000)
         packet = pickle.loads(packet)
-        print("Host has received : " + str(packet.data))
-        string = "Packet passed by routers : "
+
+        print("L'hôte " + self.id + " à reçu : " + str(packet.data))
+
+        string = "Passé par les routeurs : "
         for node in packet.nodes:
             string += node + " "
+
         print(string)
+
 
 
 def main():
@@ -181,19 +130,60 @@ def main():
     }
 
     w = {
-        ("a", "b"): 5, ("b", "a"): 5,
+        ("a", "b"): 5,  ("b", "a"): 5,
         ("a", "d"): 45, ("d", "a"): 45,
-        ("b", "e"): 3, ("e", "b"): 3,
+        ("b", "e"): 3,  ("e", "b"): 3,
         ("b", "c"): 70, ("c", "b"): 70,
         ("c", "d"): 50, ("d", "c"): 50,
         ("c", "f"): 78, ("f", "c"): 78,
-        ("d", "e"): 8, ("e", "d"): 8,
-        ("e", "f"): 7, ("f", "e"): 7
+        ("d", "e"): 8,  ("e", "d"): 8,
+        ("e", "f"): 7,  ("f", "e"): 7
     }
 
-    G = (V, E)
-    Network(G, w).run()
+    routers = []
 
+    for node in V:
+        # Créer un routeur ainsi que deux threads
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", 0))
+        
+        ROUTER_PORTS[node] = sock.getsockname()[1]
+
+        router = Router(node, (V, E), w, sock)
+        routers.append(router)
+
+        # Création du thread d'écoute
+        listen_thread = threading.Thread(target=router.listen)
+        listen_thread.start()
+
+    # Créer l'hôte d'envoie
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    
+    send_host = Host("1", sock, routers[0])
+
+    # Créer l'hôte d'écoute
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    
+    receive_host = Host("2", sock, routers[-1])
+
+    # Initialisation des tables de routage
+    for router in routers:
+        router.initialize_routing_table()
+
+    print("Tout les routeurs sont actifs !")
+
+    print("Table de routages finales des routeurs : ")
+    for router in routers:
+        print(router.id + " : " + str(router.routing_table)) 
+
+    # Partir l'hôte d'écoute
+    thread = threading.Thread(target=receive_host.listen)
+    thread.start()
+
+    # Envoie du message
+    send_host.send_to("Hello World !", receive_host)
 
 if __name__ == "__main__":
     main()
