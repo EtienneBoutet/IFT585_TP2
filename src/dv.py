@@ -34,6 +34,8 @@ class Router:
     def update_routing_table(self, received_routing_table, router_id):
         V, _ = self.graph
 
+        print("Modification de la table de routage de " + self.id)
+
         new_routing_table = {}
 
         for v in V:
@@ -48,8 +50,8 @@ class Router:
         if new_routing_table != self.routing_table:
             self.last_updated = datetime.datetime.now().time()
             self.routing_table = new_routing_table
-            # Envoyer la table de routage à tout ces voisins
 
+            # Envoyer la table de routage à tout ces voisins
             self.notify_neighbors()
 
 
@@ -60,18 +62,16 @@ class Router:
         self.routing_table[self.id] = (0, self.id)
 
     def listen(self):
-        print("Le routeur " + self.id + " est prêt à recevoir")
-
         while True:
             packet, address = self.socket.recvfrom(65000)
             packet = pickle.loads(packet)
 
             # Recevoir une table de routage
             if packet.type_data == "routing_table":
-                print("Table de routage reçu !") 
                 self.update_routing_table(packet.data, packet.nodes[0])
             # Recevoir des datas
             else:
+                print("Packet reçu par le routeur " + self.id)
                 packet.nodes.append(self.id)
 
                 if packet.dest == self.id:
@@ -80,7 +80,6 @@ class Router:
                 else:
                     # Envoyer à un autre routeur
                     self.send_to(packet, ROUTER_PORTS[self.routing_table[packet.dest][1]])
-                    # TODO : Véfirier les routeur innactif. (Selon last_updated)
 
     def send_to(self, packet, port):
         self.socket.sendto(pickle.dumps(packet), ("127.0.0.1", port))
@@ -173,11 +172,16 @@ def main():
     for router in routers:
         router.notify_neighbors()
 
+    time.sleep(2)
+    print("Tout les routeurs sont actifs !")
+
+    print("Table de routages finales des routeurs : ")
+    for router in routers:
+        print(router.id + " : " + str(router.routing_table)) 
+
     # Partir l'hôte d'écoute
     thread = threading.Thread(target=receive_host.listen)
     thread.start()
-
-    # Attendre que les tables de routage sont correct.
 
     # Envoie du message
     send_host.send_to("Hello World !", receive_host)
