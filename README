@@ -1,0 +1,24 @@
+IFT585 - TP #2
+
+Étienne Boutet - boue2327
+Raphael Valois - varl2802
+
+Le programme utilise Python 3.8, il est donc nécessaire de l'installer pour pouvoir utiliser le programme.
+
+Lien vers l'installation : `https://www.python.org/downloads/`
+
+*Note : Le programme peut ou ne pas fonctionner avec les versions inférieures à 3.8 elles n'ont pas été testé.
+
+USAGE
+======================================================
+
+Pour simuler l'algorithme LS : `python script.py ls`
+
+Pour simuler l'algorithme DV : `python script.py dv`
+
+INFORMATIONS
+======================================================
+
+Le code source de l'algorithme LS se trouve dans source/ls.py.
+
+Le code source de l'algorithme DV se trouve dans source/dv.py.
